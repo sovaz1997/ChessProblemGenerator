@@ -40,7 +40,6 @@
 
 class Game {
 private:
-	BitBoard game_board;
 	unsigned long long nodesCounter = 0;
 
 	const int WHITE_WIN = 100000000;
@@ -88,6 +87,8 @@ private:
 	Option option;
 
 public:
+	BitBoard game_board;
+
 	Game();
 	int64_t negamax(BitBoard & b, int64_t alpha, int64_t beta, int depth, int real_depth, int rule, bool inNullMove);
 	int64_t negamax_elementary(BitBoard & b, int64_t alpha, int64_t beta, int depth, int real_depth, int rule, bool inNullMove);

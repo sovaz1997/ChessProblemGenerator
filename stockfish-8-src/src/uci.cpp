@@ -172,8 +172,8 @@ void UCI::loop(int argc, char* argv[]) {
           ||  token == "stop"
           || (token == "ponderhit" && Search::Signals.stopOnPonderhit))
       {
-          Search::Signals.stop = true;
-          Threads.main()->start_searching(true); // Could be sleeping
+          //Search::Signals.stop = true;
+          //Threads.main()->start_searching(true); // Could be sleeping
       }
       else if (token == "ponderhit")
           Search::Limits.ponder = 0; // Switch to normal search

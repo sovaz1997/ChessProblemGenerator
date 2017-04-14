@@ -14,115 +14,20 @@
 */
 
 #include <iostream>
+#include <vector>
 #include <string>
 #include <fstream>
-
 #include "game.hpp"
 #include "bitboard.hpp"
 
-#if defined(_WIN32) || defined(_WIN64)
-	#include <windows.h>
-#elif defined(__unix__) || defined(unix) || defined(__unix) || defined(__APPLE__)
-	#include <unistd.h>
+void analyser(std::ifstream&& file_stream);
+std::vector<std::string> split(std::string& str);
+void testInStockfish(std::string fen);
+bool getScore(std::string line, int& score);
 
-	#include <sys/time.h>
-	#include <sys/types.h>
-	#include <sys/select.h>
-#endif
+std::pair<int, int> stockfish_data_analyser(std::ifstream&& stockfish_data);
 
-bool is_input_available() {
-
-#if defined(_WIN32) || defined(_WIN64)
-
-	static bool init = false, is_pipe;
-	static HANDLE stdin_h;
-	DWORD val, error;
-	bool UseDebug = false;
-
-	// val = 0; // needed to make the compiler happy?
-
-	// have a look at the "local" buffer first, *this time before init (no idea if it helps)*
-
-	if (UseDebug && !init) printf("info string init=%d stdin->_cnt=%d\n",int(init),stdin->_cnt);
-
-	if (stdin->_cnt > 0) return true; // HACK: assumes FILE internals
-
-	// input init (only done once)
-
-	if (!init) {
-
-		init = true;
-
-		stdin_h = GetStdHandle(STD_INPUT_HANDLE);
-
-		if (UseDebug && (stdin_h == NULL || stdin_h == INVALID_HANDLE_VALUE)) {
-			error = GetLastError();
-			printf("info string GetStdHandle() failed, error=%d\n",error);
-		}
-
-		is_pipe = !GetConsoleMode(stdin_h,&val); // HACK: assumes pipe on failure
-
-		if (UseDebug) printf("info string init=%d is_pipe=%d\n",int(init),int(is_pipe));
-
-		if (UseDebug && is_pipe) { // GetConsoleMode() failed, everybody assumes pipe then
-			error = GetLastError();
-			printf("info string GetConsoleMode() failed, error=%d\n",error);
-		}
-
-		if (!is_pipe) {
-			SetConsoleMode(stdin_h,val&~(ENABLE_MOUSE_INPUT|ENABLE_WINDOW_INPUT));
-			FlushConsoleInputBuffer(stdin_h); // no idea if we can lose data doing this
-		}
-	}
-
-	// different polling depending on input type
-	// does this code work at all for pipes?
-
-	if (is_pipe) {
-
-		if (!PeekNamedPipe(stdin_h,NULL,0,NULL,&val ,NULL)) {
-
-			if (UseDebug) { // PeekNamedPipe() failed, everybody assumes EOF then
-				error = GetLastError();
-				printf("info string PeekNamedPipe() failed, error=%d\n",error);
-			}
-
-			return true; // HACK: assumes EOF on failure
-		}
-
-		if (UseDebug && val < 0) printf("info string PeekNamedPipe(): val=%d\n",val);
-
-		return val > 0; // != 0???
-
-	} else {
-
-		GetNumberOfConsoleInputEvents(stdin_h,&val);
-		return val > 1; // no idea why 1
-	}
-
-	return false;
-
-#else // assume POSIX
-
-	int val;
-	fd_set set[1];
-	struct timeval time_val[1];
-
-	FD_ZERO(set);
-	FD_SET(STDIN_FILENO,set);
-
-	time_val->tv_sec = 0;
-	time_val->tv_usec = 0;
-
-	val = select(STDIN_FILENO+1,set,NULL,NULL,time_val);
-	//if (val == -1 && errno != EINTR) {
-	//my_fatal("input_available(): select(): %s\n",strerror(errno));
-	//}
-
-	return val > 0;
-
-#endif
-}
+const int MAX_SCORE = 1000000;
 
 int main(int argc, char* argv[]) {
 	if(argc < 2) {
@@ -153,6 +58,8 @@ int main(int argc, char* argv[]) {
 
 	system("rm tmp.uci");
 
+	analyser(std::ifstream("result.uci"));
+
 
 	//Game* game = new Game();
 	//game->startGame();
@@ -160,4 +67,120 @@ int main(int argc, char* argv[]) {
 
 
 	//delete game;
+}
+
+void analyser(std::ifstream&& file_stream) {
+	std::string line;
+	Game game;
+	while(std::getline(file_stream, line)) {
+		std::vector<std::string> moves = split(line);
+		game.game_board.setFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+		
+		for(int i = 0; i < moves.size(); ++i) {
+			game.move(moves[i]);
+			testInStockfish(game.game_board.getFen());
+		}
+	}
+}
+
+std::vector<std::string> split(std::string& str) {
+	std::vector<std::string> vec;
+
+	std::string buffer;
+	for(int i = 0; i < str.size(); ++i) {
+		if(str[i] == ' ') {
+			if(!buffer.empty()) {
+				vec.push_back(buffer);
+				buffer.clear();
+			}
+		} else {
+			buffer.push_back(str[i]);
+		}
+	}
+
+	if(!buffer.empty()) {
+		vec.push_back(buffer);
+		buffer.clear();
+	}
+
+	return vec;
+}
+
+void testInStockfish(std::string fen) {
+	int max_depth = 3;
+	
+	for(int i = 1; i <= max_depth; ++i) {
+		std::ofstream input_stockfish("input.stockfish");
+		input_stockfish << "setoption name Debug Log File value data.stockfish\nposition fen " << fen <<  "\n" << "go depth " << std::to_string(i) << std::endl;
+
+		system("./stockfish_8_x64 < input.stockfish");
+		std::pair<int, int> anylyse_stockfish = stockfish_data_analyser(std::ifstream("data.stockfish"));
+
+		std::ofstream result("result.txt");
+		if(abs(anylyse_stockfish.first) <= 100 && anylyse_stockfish.second - anylyse_stockfish.first >= 500) {
+			if(i == max_depth - 1) {
+				//std::cout << fen << std::endl;
+				result << fen << std::endl;
+				
+			}
+		}
+		//std::cout << anylyse_stockfish.first << " " << anylyse_stockfish.second << std::endl;
+	}
+
+	//system("rm data.stockfish");
+}
+
+std::pair<int, int> stockfish_data_analyser(std::ifstream&& stockfish_data) {
+	std::string line;
+	int count = 0;
+	int minimum = 0;
+	int maximum = 0;
+
+	int score;
+
+	while(std::getline(stockfish_data, line)) {
+		if(getScore(line, score)) {
+			if(!count) {
+				minimum = score;
+				maximum = score;
+			} else {
+				maximum = score;
+			}
+
+			++count;
+		}
+	}
+
+	return std::pair<int, int> (minimum, maximum);
+}
+
+bool getScore(std::string line, int& score) {
+	std::vector<std::string> split_line = split(line);
+
+	if(split_line.size() > 1) {
+		if(split_line[1] == "info") {
+			for(int i = 0; i < split_line.size(); ++i) {
+				if(split_line[i] == "score") {
+					if(split_line[i + 1] == "cp") {
+						score = std::stoi(split_line[i + 2]);
+						return true;
+					} else if(split_line[i + 1] == "mate") {
+						int mate = std::stoi(split_line[i + 2]);
+						if(mate > 0) {
+							score = MAX_SCORE - mate;
+						} else if(mate < 0) {
+							score = -MAX_SCORE - mate;
+						} else {
+							return false;
+						}
+						return true;
+					} else {
+						return false;
+					}
+				}
+			}
+		}
+	}
+
+	return false;
 }
