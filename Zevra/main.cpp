@@ -138,6 +138,21 @@ int main(int argc, char* argv[]) {
 	system(cmd.c_str());
 	system("rm tmp.info");
 
+	std::ifstream input_file("tmp.uci");
+	std::string line;
+
+	std::ofstream output_file("result.uci");
+
+	while(std::getline(input_file, line)) {
+		if(!line.empty()) {
+			if(line[0] != '[') {
+				output_file << line << "\n";
+			}
+		}
+	}
+
+	system("rm tmp.uci");
+
 
 	//Game* game = new Game();
 	//game->startGame();
