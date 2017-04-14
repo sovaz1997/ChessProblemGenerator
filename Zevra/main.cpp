@@ -22,7 +22,7 @@
 
 void analyser(std::ifstream&& file_stream);
 std::vector<std::string> split(std::string& str);
-void testInStockfish(std::string fen);
+void testInStockfish(std::string fen, std::ofstream& result);
 bool getScore(std::string line, int& score);
 
 std::pair<int, int> stockfish_data_analyser(std::ifstream&& stockfish_data);
@@ -72,13 +72,14 @@ int main(int argc, char* argv[]) {
 void analyser(std::ifstream&& file_stream) {
 	std::string line;
 	Game game;
+	std::ofstream result("result.txt");
 	while(std::getline(file_stream, line)) {
 		std::vector<std::string> moves = split(line);
 		game.game_board.setFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
 		
 		for(int i = 0; i < moves.size(); ++i) {
 			game.move(moves[i]);
-			testInStockfish(game.game_board.getFen());
+			testInStockfish(game.game_board.getFen(), result);
 		}
 	}
 }
@@ -106,7 +107,7 @@ std::vector<std::string> split(std::string& str) {
 	return vec;
 }
 
-void testInStockfish(std::string fen) {
+void testInStockfish(std::string fen, std::ofstream& result) {
 	int max_depth = 3;
 	
 	for(int i = 1; i <= max_depth; ++i) {
@@ -116,9 +117,8 @@ void testInStockfish(std::string fen) {
 		system("./stockfish_8_x64 < input.stockfish");
 		std::pair<int, int> anylyse_stockfish = stockfish_data_analyser(std::ifstream("data.stockfish"));
 
-		std::ofstream result("result.txt");
 		if(abs(anylyse_stockfish.first) <= 100 && anylyse_stockfish.second - anylyse_stockfish.first >= 500) {
-			if(i == max_depth - 1) {
+			if(i >= max_depth) {
 				//std::cout << fen << std::endl;
 				result << fen << std::endl;
 				
